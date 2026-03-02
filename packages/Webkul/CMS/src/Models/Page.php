@@ -13,11 +13,6 @@ class Page extends TranslatableModel implements PageContract
 {
     use HasFactory;
 
-    /**
-     * Table associated with the model.
-     *
-     * @var string
-     */
     protected $table = 'cms_pages';
 
     protected $translationForeignKey = 'cms_page_id';
@@ -44,30 +39,39 @@ class Page extends TranslatableModel implements PageContract
         'url_key',
     ];
 
-    /**
-     * With the translations given attributes
-     *
-     * @var array
-     */
     protected $with = ['translations'];
 
-    /**
-     * Get the channels.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany;
-     */
     public function channels()
     {
-        return $this->belongsToMany(ChannelProxy::modelClass(), 'cms_page_channels', 'cms_page_id');
+        return $this->belongsToMany(
+            ChannelProxy::modelClass(),
+            'cms_page_channels',
+            'cms_page_id'
+        );
     }
 
-    /**
-     * Create a new factory instance for the model.
-     */
+    /* -------------------- Scopes -------------------- */
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', 1);
+    }
+
+    public function scopeOfType($query, string $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('position');
+    }
+
     protected static function newFactory(): Factory
     {
         return PageFactory::new();
     }
+
 
     public function widgets()
     {
@@ -85,4 +89,5 @@ class Page extends TranslatableModel implements PageContract
         ->withTimestamps()
         ->orderBy('cms_page_widgets.sort_order');
     }
+
 }
