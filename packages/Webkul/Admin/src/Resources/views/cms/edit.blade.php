@@ -56,7 +56,7 @@
             <div class="flex items-center gap-x-1">
                 <!-- Locale Switcher -->
                 <x-admin::dropdown
-                    position="bottom-{{ core()->getCurrentLocale()->direction === 'ltr' ? 'left' : 'right' }}" 
+                    position="bottom-{{ core()->getCurrentLocale()->direction === 'ltr' ? 'left' : 'right' }}"
                     :class="core()->getAllLocales()->count() <= 1 ? 'hidden' : ''"
                 >
                     <!-- Dropdown Toggler -->
@@ -68,7 +68,7 @@
                             <span class="icon-language text-2xl"></span>
 
                             {{ $currentLocale->name }}
-                            
+
                             <input
                                 type="hidden"
                                 name="locale"
@@ -127,6 +127,8 @@
                         <x-admin::form.control-group.error control-name="{{ $currentLocale->code }}[html_content]" />
                     </x-admin::form.control-group>
                 </div>
+
+                @include('admin::cms.partials.page-widgets', ['page' => $page])
 
                 {!! view_render_event('bagisto.admin.cms.pages.edit.card.content.after', ['page' => $page]) !!}
 
@@ -252,7 +254,7 @@
                         </x-admin::form.control-group>
 
                         <!-- Select Channels -->
-                        <x-admin::form.control-group.label class="required">
+                        <x-admin::form.control-group.label>
                             @lang('admin::app.cms.create.channels')
                         </x-admin::form.control-group.label>
 
@@ -262,7 +264,6 @@
                                     type="checkbox"
                                     :id="'channels_' . $channel->id"
                                     name="channels[]"
-                                    rules="required"
                                     :value="$channel->id"
                                     :for="'channels_' . $channel->id"
                                     :label="trans('admin::app.cms.create.channels')"
@@ -271,14 +272,16 @@
 
                                 <label
                                     class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300"
-                                    for="channels_{{ $channel->id }}" 
+                                    for="channels_{{ $channel->id }}"
                                 >
                                     {{ core()->getChannelName($channel) }}
                                 </label>
                             </x-admin::form.control-group>
                         @endforeach
-                        
+
                         <x-admin::form.control-group.error control-name="channels[]" />
+                        @include('admin::cms.partials.page-settings', ['page' => $page])
+
                     </x-slot>
                 </x-admin::accordion>
 

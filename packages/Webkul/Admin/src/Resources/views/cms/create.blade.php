@@ -72,6 +72,8 @@
                     </x-admin::form.control-group>
                 </div>
 
+                @include('admin::cms.partials.page-widgets')
+
                 {!! view_render_event('bagisto.admin.cms.pages.create.card.description.after') !!}
 
                 {!! view_render_event('bagisto.admin.cms.pages.create.card.seo.before') !!}
@@ -196,7 +198,7 @@
                         </x-admin::form.control-group>
 
                         <!-- Select Channels -->
-                        <x-admin::form.control-group.label class="required">
+                        <x-admin::form.control-group.label>
                             @lang('admin::app.cms.create.channels')
                         </x-admin::form.control-group.label>
 
@@ -206,7 +208,6 @@
                                     type="checkbox"
                                     :id="'channels_' . $channel->id"
                                     name="channels[]"
-                                    rules="required"
                                     :value="$channel->id"
                                     :for="'channels_' . $channel->id"
                                     :label="trans('admin::app.cms.create.channels')"
@@ -214,7 +215,7 @@
 
                                 <label
                                     class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300"
-                                    for="channels_{{ $channel->id }}" 
+                                    for="channels_{{ $channel->id }}"
                                 >
                                     {{ core()->getChannelName($channel) }}
                                 </label>
@@ -222,6 +223,7 @@
                         @endforeach
 
                         <x-admin::form.control-group.error control-name="channels[]" />
+                         @include('admin::cms.partials.page-settings')
                     </x-slot>
                 </x-admin::accordion>
 

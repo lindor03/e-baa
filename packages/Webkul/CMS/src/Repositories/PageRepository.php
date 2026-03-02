@@ -106,4 +106,19 @@ class PageRepository extends Repository
             get_class($this->model), $urlKey
         );
     }
+
+    /**
+     * Get active pages by type for current channel
+     */
+    public function getByType(string $type)
+    {
+        return $this->model
+            ->active()
+            ->ofType($type)
+            ->ordered()
+            ->whereHas('channels', function ($q) {
+                $q->where('id', core()->getCurrentChannel()->id);
+            })
+            ->get();
+    }
 }

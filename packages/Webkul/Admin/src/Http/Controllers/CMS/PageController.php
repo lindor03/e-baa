@@ -52,13 +52,12 @@ class PageController extends Controller
         $this->validate(request(), [
             'url_key'      => ['required', 'unique:cms_page_translations,url_key', new \Webkul\Core\Rules\Slug],
             'page_title'   => 'required',
-            'channels'     => 'required',
             'html_content' => 'required',
         ]);
 
         Event::dispatch('cms.page.create.before');
 
-        $page = $this->pageRepository->create(request()->only([
+        $data = request()->only([
             'page_title',
             'channels',
             'html_content',
@@ -66,7 +65,21 @@ class PageController extends Controller
             'url_key',
             'meta_keywords',
             'meta_description',
-        ]));
+        ]);
+
+        /* -----------------------------
+        |  NEW CMS FIELDS
+        |-----------------------------*/
+        $data['type']      = request()->input('type', 'page');
+        $data['position']  = (int) request()->input('position', 0);
+        $data['is_active'] = request()->boolean('is_active');
+
+        $page = $this->pageRepository->create($data);
+
+        /* -----------------------------
+        |  SYNC PAGE WIDGETS
+        |-----------------------------*/
+        $this->syncWidgets($page);
 
         Event::dispatch('cms.page.create.after', $page);
 
@@ -97,23 +110,42 @@ class PageController extends Controller
         $locale = core()->getRequestedLocaleCode();
 
         $this->validate(request(), [
-            $locale.'.url_key'      => ['required', new \Webkul\Core\Rules\Slug, function ($attribute, $value, $fail) use ($id) {
-                if (! $this->pageRepository->isUrlKeyUnique($id, $value)) {
-                    $fail(trans('admin::app.cms.index.already-taken', ['name' => 'Page']));
-                }
-            }],
-            $locale.'.page_title'     => 'required',
-            $locale.'.html_content'   => 'required',
-            'channels'                => 'required',
+            $locale . '.url_key' => [
+                'required',
+                new \Webkul\Core\Rules\Slug,
+                function ($attribute, $value, $fail) use ($id) {
+                    if (! $this->pageRepository->isUrlKeyUnique($id, $value)) {
+                        $fail(trans('admin::app.cms.index.already-taken', ['name' => 'Page']));
+                    }
+                },
+            ],
+            $locale . '.page_title'   => 'required',
+            $locale . '.html_content' => 'required',
         ]);
 
         Event::dispatch('cms.page.update.before', $id);
 
-        $page = $this->pageRepository->update([
+        $page = $this->pageRepository->findOrFail($id);
+
+        $data = [
             $locale    => request()->input($locale),
             'channels' => request()->input('channels'),
             'locale'   => $locale,
-        ], $id);
+
+            /* -----------------------------
+            |  NEW CMS FIELDS
+            |-----------------------------*/
+            'type'      => request()->input('type', $page->type),
+            'position'  => (int) request()->input('position', $page->position),
+            'is_active' => request()->boolean('is_active'),
+        ];
+
+        $page = $this->pageRepository->update($data, $id);
+
+        /* -----------------------------
+        |  SYNC PAGE WIDGETS
+        |-----------------------------*/
+        $this->syncWidgets($page);
 
         Event::dispatch('cms.page.update.after', $page);
 
@@ -158,5 +190,25 @@ class PageController extends Controller
         return new JsonResponse([
             'message' => trans('admin::app.cms.index.datagrid.mass-delete-success'),
         ], 200);
+    }
+
+    protected function syncWidgets($page): void
+    {
+        $widgets = request()->input('widgets', []);
+
+        $sync = [];
+
+        foreach ($widgets as $widgetId => $data) {
+            if (! isset($data['enabled'])) {
+                continue;
+            }
+
+            $sync[$widgetId] = [
+                'sort_order' => (int) ($data['sort_order'] ?? 0),
+                'is_active'  => true,
+            ];
+        }
+
+        $page->widgets()->sync($sync);
     }
 }

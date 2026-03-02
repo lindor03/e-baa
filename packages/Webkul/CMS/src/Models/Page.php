@@ -20,25 +20,20 @@ class Page extends TranslatableModel implements PageContract
      */
     protected $table = 'cms_pages';
 
-    /**
-     * Translation model foreign key column
-     *
-     * @var string
-     */
     protected $translationForeignKey = 'cms_page_id';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
-    protected $fillable = ['layout'];
+    protected $fillable = [
+        'layout',
+        'type',
+        'position',
+        'is_active',
+    ];
 
-    /**
-     * The attributes that are translatable.
-     *
-     * @var array
-     */
+    protected $casts = [
+        'position'  => 'integer',
+        'is_active' => 'boolean',
+    ];
+
     public $translatedAttributes = [
         'content',
         'meta_description',
@@ -72,5 +67,22 @@ class Page extends TranslatableModel implements PageContract
     protected static function newFactory(): Factory
     {
         return PageFactory::new();
+    }
+
+    public function widgets()
+    {
+        return $this->belongsToMany(
+            \Webkul\Widgets\Models\Widget::class,
+            'cms_page_widgets',
+            'cms_page_id',
+            'widget_id'
+        )
+        ->withPivot([
+            'position',
+            'sort_order',
+            'is_active',
+        ])
+        ->withTimestamps()
+        ->orderBy('cms_page_widgets.sort_order');
     }
 }
