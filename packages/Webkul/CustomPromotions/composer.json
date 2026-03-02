@@ -1,0 +1,24 @@
+{
+    "name": "webkul/custom-promotions",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Your Name",
+            "email": "your@email.com"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Webkul\\CustomPromotions\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Webkul\\CustomPromotions\\Providers\\CustomPromotionsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev"
+}

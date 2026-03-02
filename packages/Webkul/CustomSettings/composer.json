@@ -1,0 +1,24 @@
+{
+    "name": "bagisto/laravel-custom-settings",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Your Name",
+            "email": "your@email.com"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Webkul\\CustomSettings\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Webkul\\CustomSettings\\Providers\\CustomSettingsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev"
+}

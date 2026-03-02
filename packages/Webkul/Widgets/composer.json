@@ -1,0 +1,24 @@
+{
+    "name": "webkul/widgets",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Lindor",
+            "email": "lindor.morina@progtelx.com"
+        }
+    ],
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Webkul\\Widgets\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Webkul\\Widgets\\Providers\\WidgetsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "progtelx/rest-api",
+  "description": "A REST API extension for Laravel.",
+  "license": "MIT",
+  "require": {
+    "darkaonline/l5-swagger": "^8.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Webkul\\RestApi\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Webkul\\RestApi\\Providers\\RestApiServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
