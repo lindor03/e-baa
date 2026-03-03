@@ -58,116 +58,41 @@ class AuthController extends CustomerController
         ]);
     }
 
-    /**
-     * Login the customer.
-     */
-    // public function login(Request $request): Response
-    // {
-    //     $request->validate([
-    //         'email'    => 'required|email',
-    //         'password' => 'required',
-    //     ]);
 
-    //     if (! EnsureFrontendRequestsAreStateful::fromFrontend($request)) {
-    //         $request->validate([
-    //             'device_name' => 'required',
-    //         ]);
-
-    //         $customer = $this->customerRepository->where('email', $request->email)->first();
-
-    //         if (! $customer || ! Hash::check($request->password, $customer->password)) {
-    //             throw ValidationException::withMessages([
-    //                 'email' => trans('rest-api::app.shop.customer.accounts.error.credential-error'),
-    //             ]);
-    //         }
-
-    //         /**
-    //          * Preventing multiple token creation.
-    //          */
-    //         $customer->tokens()->delete();
-
-    //         /**
-    //          * Event passed to prepare cart after login.
-    //          */
-    //         Event::dispatch('customer.after.login', $customer);
-
-    //         return response([
-    //             'data'    => new CustomerResource($customer),
-    //             'message' => trans('rest-api::app.shop.customer.accounts.logged-in-success'),
-    //             'token'   => $customer->createToken($request->device_name, ['role:customer'])->plainTextToken,
-    //         ]);
-
-    //     }
-
-    //     if (Auth::attempt($request->only(['email', 'password']))) {
-    //         $request->session()->regenerate();
-
-    //         return response([
-    //             'data'    => new CustomerResource($this->resolveShopUser($request)),
-    //             'message' => trans('rest-api::app.shop.customer.accounts.logged-in-success'),
-    //         ]);
-    //     }
-
-    //     return response([
-    //         'message' => trans('rest-api::app.shop.customer.accounts.error.invalid'),
-    //     ], 401);
-    // }
 
 
     public function login(Request $request): Response
     {
         $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required',
+            'email'       => 'required|email',
+            'password'    => 'required',
+            'device_name' => 'required|string|max:255',
         ]);
 
-        // API / Mobile / Non-stateful requests (Sanctum token auth)
-        if (! EnsureFrontendRequestsAreStateful::fromFrontend($request)) {
-            $request->validate([
-                'device_name' => 'required|string|max:255',
-            ]);
+        $customer = $this->customerRepository
+            ->where('email', $request->email)
+            ->first();
 
-            $customer = $this->customerRepository->where('email', $request->email)->first();
-
-            if (! $customer || ! Hash::check($request->password, $customer->password)) {
-                throw ValidationException::withMessages([
-                    'email' => trans('rest-api::app.shop.customer.accounts.error.credential-error'),
-                ]);
-            }
-
-            /**
-             * Keep one token per device name:
-             * delete only the token for this device (NOT all tokens).
-             */
-            $customer->tokens()
-                ->where('name', $request->device_name)
-                ->delete();
-
-            /**
-             * Event passed to prepare cart after login.
-             */
-            Event::dispatch('customer.after.login', $customer);
-
-            return response([
-                'data'    => new CustomerResource($customer),
-                'message' => trans('rest-api::app.shop.customer.accounts.logged-in-success'),
-                'token'   => $customer->createToken($request->device_name, ['role:customer'])->plainTextToken,
+        if (! $customer || ! Hash::check($request->password, $customer->password)) {
+            throw ValidationException::withMessages([
+                'email' => trans('rest-api::app.shop.customer.accounts.error.credential-error'),
             ]);
         }
 
-        // Web / Frontend stateful requests (session auth)
-        if (Auth::attempt($request->only(['email', 'password']))) {
-            $request->session()->regenerate();
+        // delete existing token for same device
+        $customer->tokens()
+            ->where('name', $request->device_name)
+            ->delete();
 
-            return response([
-                'data'    => new CustomerResource($this->resolveShopUser($request)),
-                'message' => trans('rest-api::app.shop.customer.accounts.logged-in-success'),
-            ]);
-        }
+        Event::dispatch('customer.after.login', $customer);
 
         return response([
-            'message' => trans('rest-api::app.shop.customer.accounts.error.invalid'),
-        ], 401);
+            'data'    => new CustomerResource($customer),
+            'message' => trans('rest-api::app.shop.customer.accounts.logged-in-success'),
+            'token'   => $customer
+                ->createToken($request->device_name, ['role:customer'])
+                ->plainTextToken,
+        ]);
     }
 
     /**
@@ -294,9 +219,8 @@ class AuthController extends CustomerController
     {
         $customer = $this->resolveShopUser($request);
 
-        ! EnsureFrontendRequestsAreStateful::fromFrontend($request)
-            ? $customer->tokens()->delete()
-            : auth()->guard('customer')->logout();
+        // delete only current token
+        $request->user()->currentAccessToken()->delete();
 
         Event::dispatch('customer.after.logout', $customer->id);
 
