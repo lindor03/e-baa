@@ -58,7 +58,7 @@ class PaymentController extends Controller
             'Currency'     => $currency,
             'TotalAmount'  => $amount,
             'PurchaseDesc' => 'Order '.$orderId,
-            'locale'       => 'al',
+            // 'locale'       => 'al',
             'Signature'    => $signature
         ];
 
