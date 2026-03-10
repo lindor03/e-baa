@@ -21,7 +21,7 @@ class PaymentController extends Controller
     ) {}
 
     /**
-     * Step 1: Redirect customer to bank
+     * Redirect customer to RaiAccept
      */
     public function redirect()
     {
@@ -31,24 +31,18 @@ class PaymentController extends Controller
             return redirect()->route('shop.checkout.cart.index');
         }
 
-        $merchantId = (string) core()->getConfigData('sales.payment_methods.raiaccept.merchant_id');
-        $terminalId = (string) core()->getConfigData('sales.payment_methods.raiaccept.terminal_id');
-        $gatewayUrl = (string) core()->getConfigData('sales.payment_methods.raiaccept.gateway_url');
-        $currency   = (string) core()->getConfigData('sales.payment_methods.raiaccept.currency_numeric');
-        $version    = (string) (core()->getConfigData('sales.payment_methods.raiaccept.version') ?: '1');
-        $locale     = (string) (core()->getConfigData('sales.payment_methods.raiaccept.locale') ?: 'sq');
-        $privateKey = (string) core()->getConfigData('sales.payment_methods.raiaccept.private_key_pem');
-        $debug      = (bool) core()->getConfigData('sales.payment_methods.raiaccept.debug');
-
-        if (! $merchantId || ! $terminalId || ! $gatewayUrl || ! $currency || ! $privateKey) {
-            return redirect()
-                ->route('shop.checkout.cart.index')
-                ->withErrors('RaiAccept configuration is incomplete.');
-        }
+        $merchantId = core()->getConfigData('sales.payment_methods.raiaccept.merchant_id');
+        $terminalId = core()->getConfigData('sales.payment_methods.raiaccept.terminal_id');
+        $gatewayUrl = core()->getConfigData('sales.payment_methods.raiaccept.gateway_url');
+        $currency   = core()->getConfigData('sales.payment_methods.raiaccept.currency_numeric');
+        $version    = core()->getConfigData('sales.payment_methods.raiaccept.version') ?: '1';
+        $locale     = core()->getConfigData('sales.payment_methods.raiaccept.locale') ?: 'sq';
+        $privateKey = core()->getConfigData('sales.payment_methods.raiaccept.private_key_pem');
+        $debug      = core()->getConfigData('sales.payment_methods.raiaccept.debug');
 
         $orderId      = 'ORD' . $cart->id . now()->format('YmdHis');
         $purchaseTime = now()->format('ymdHis');
-        $amount       = (string) ((int) round((float) $cart->grand_total * 100));
+        $amount       = (string)((int) round($cart->grand_total * 100));
 
         $signString = RaiAcceptSignature::buildRequestString(
             $merchantId,
@@ -59,20 +53,7 @@ class PaymentController extends Controller
             $amount
         );
 
-        try {
-            $signature = RaiAcceptSignature::sign($signString, $privateKey);
-        } catch (Exception $e) {
-
-            if ($debug) {
-                Log::error('RaiAccept signing failed', [
-                    'message' => $e->getMessage(),
-                ]);
-            }
-
-            return redirect()
-                ->route('shop.checkout.cart.index')
-                ->withErrors('Payment signing failed.');
-        }
+        $signature = RaiAcceptSignature::sign($signString, $privateKey);
 
         Session::put('raiaccept.cart_id', $cart->id);
         Session::put('raiaccept.order_ref', $orderId);
@@ -91,13 +72,14 @@ class PaymentController extends Controller
         ];
 
         if ($debug) {
+
             $safe = $data;
             $safe['Signature'] = '[hidden]';
 
             Log::info('RaiAccept redirect request', [
-                'payload' => $safe,
+                'payload'          => $safe,
                 'signature_string' => $signString,
-                'gateway' => $gatewayUrl,
+                'gateway'          => $gatewayUrl,
             ]);
         }
 
@@ -108,22 +90,19 @@ class PaymentController extends Controller
     }
 
     /**
-     * Step 2: Customer returns from bank
+     * Bank return URL
      */
     public function return(Request $request)
     {
         $input = $request->all();
 
-        $tranCode  = (string) ($input['TranCode'] ?? '');
-        $signature = (string) ($input['Signature'] ?? '');
-        $bankKey   = (string) core()->getConfigData('sales.payment_methods.raiaccept.bank_public_key_pem');
-        $debug     = (bool) core()->getConfigData('sales.payment_methods.raiaccept.debug');
+        $tranCode  = $input['TranCode'] ?? '';
+        $signature = $input['Signature'] ?? '';
+        $bankKey   = core()->getConfigData('sales.payment_methods.raiaccept.bank_public_key_pem');
+        $debug     = core()->getConfigData('sales.payment_methods.raiaccept.debug');
 
         if ($debug) {
-            $safe = $input;
-            unset($safe['Signature']);
-
-            Log::info('RaiAccept return callback', $safe);
+            Log::info('RaiAccept return callback', $input);
         }
 
         /**
@@ -134,30 +113,31 @@ class PaymentController extends Controller
         if ($bankKey && $signature) {
 
             $responseString = RaiAcceptResponse::buildResponseString($input);
-            $isVerified = RaiAcceptSignature::verify($responseString, $signature, $bankKey);
+
+            $isVerified = RaiAcceptSignature::verify(
+                $responseString,
+                $signature,
+                $bankKey
+            );
 
             if ($debug) {
                 Log::info('RaiAccept return verification', [
                     'verified' => $isVerified,
-                    'response_string' => $responseString,
+                    'string'   => $responseString,
                 ]);
             }
         }
 
         if (! $isVerified) {
-            return redirect()
-                ->route('shop.checkout.cart.index')
-                ->withErrors('Payment verification failed.');
+            return redirect()->route('shop.checkout.cart.index');
         }
 
         if ($tranCode !== '000') {
-            return redirect()
-                ->route('shop.checkout.cart.index')
-                ->withErrors('Payment failed.');
+            return redirect()->route('shop.checkout.cart.index');
         }
 
         /**
-         * Recover cart if session lost
+         * Restore cart if session expired
          */
         $cart = Cart::getCart();
 
@@ -175,18 +155,30 @@ class PaymentController extends Controller
         }
 
         /**
+         * Security check (bank certification requirement)
+         */
+        if ((int)$input['TotalAmount'] !== (int) round($cart->grand_total * 100)) {
+
+            Log::warning('RaiAccept amount mismatch', [
+                'bank' => $input['TotalAmount'],
+                'cart' => round($cart->grand_total * 100),
+            ]);
+
+            return redirect()->route('shop.checkout.cart.index');
+        }
+
+        /**
          * Prevent duplicate orders
          */
         $existingOrder = $this->orderRepository->findOneByField('cart_id', $cart->id);
 
         if ($existingOrder) {
 
-            session()->put('last_order_id', $existingOrder->id);
             session()->flash('order_id', $existingOrder->id);
 
             Cart::deActivateCart();
 
-            return redirect()->route('shop.checkout.success');
+            return redirect()->route('shop.checkout.onepage.success');
         }
 
         /**
@@ -195,23 +187,19 @@ class PaymentController extends Controller
         $order = $this->orderRepository->create(Cart::prepareDataForOrder());
 
         /**
-         * Save payment metadata
+         * Store payment metadata
          */
         try {
 
             $additional = $order->payment->additional ?? [];
 
-            if (! is_array($additional)) {
-                $additional = [];
-            }
-
             $additional['raiaccept'] = [
-                'tran_code'     => $tranCode,
-                'gateway_order' => $input['OrderID'] ?? null,
-                'amount'        => $input['TotalAmount'] ?? null,
-                'currency'      => $input['Currency'] ?? null,
-                'purchase_time' => $input['PurchaseTime'] ?? null,
-                'raw'           => $input,
+                'tran_code' => $tranCode,
+                'rrn'       => $input['Rrn'] ?? null,
+                'approval'  => $input['ApprovalCode'] ?? null,
+                'amount'    => $input['TotalAmount'] ?? null,
+                'currency'  => $input['Currency'] ?? null,
+                'raw'       => $input,
             ];
 
             $order->payment->additional = $additional;
@@ -220,57 +208,32 @@ class PaymentController extends Controller
         } catch (Exception $e) {
 
             if ($debug) {
-                Log::warning('RaiAccept metadata save failed', [
+                Log::warning('Metadata save failed', [
                     'message' => $e->getMessage(),
                 ]);
             }
         }
 
-        /**
-         * Required Bagisto success session
-         */
-        session()->put('last_order_id', $order->id);
         session()->flash('order_id', $order->id);
 
         Cart::deActivateCart();
 
-        return redirect()->route('shop.checkout.success');
+        return redirect()->route('shop.checkout.onepage.success');
     }
 
     /**
-     * Step 3: Bank server notification
+     * Bank server notification
      */
     public function notify(Request $request)
     {
         $input = $request->all();
 
-        $signature = (string) ($input['Signature'] ?? '');
-        $bankKey   = (string) core()->getConfigData('sales.payment_methods.raiaccept.bank_public_key_pem');
-        $debug     = (bool) core()->getConfigData('sales.payment_methods.raiaccept.debug');
+        $signature = $input['Signature'] ?? '';
+        $bankKey   = core()->getConfigData('sales.payment_methods.raiaccept.bank_public_key_pem');
 
-        if ($debug) {
+        $responseString = RaiAcceptResponse::buildResponseString($input);
 
-            $safe = $input;
-            unset($safe['Signature']);
-
-            Log::info('RaiAccept notify callback', $safe);
-        }
-
-        $isVerified = true;
-
-        if ($bankKey && $signature) {
-
-            $responseString = RaiAcceptResponse::buildResponseString($input);
-            $isVerified = RaiAcceptSignature::verify($responseString, $signature, $bankKey);
-
-            if ($debug) {
-                Log::info('RaiAccept notify verification', [
-                    'verified' => $isVerified,
-                ]);
-            }
-        }
-
-        if (! $isVerified) {
+        if (! RaiAcceptSignature::verify($responseString, $signature, $bankKey)) {
 
             return response(
                 "Response.action=reverse\nResponse.reason=invalid_signature",

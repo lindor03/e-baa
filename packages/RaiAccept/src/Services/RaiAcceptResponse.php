@@ -4,10 +4,6 @@ namespace RaiAccept\Services;
 
 class RaiAcceptResponse
 {
-    /**
-     * Best-effort response-string builder for gateway callback verification.
-     * Adjust field order later if your bank provides the exact callback signature format.
-     */
     public static function buildResponseString(array $input): string
     {
         $fields = [
@@ -19,7 +15,7 @@ class RaiAcceptResponse
             $input['TotalAmount'] ?? '',
             $input['TranCode'] ?? '',
             $input['ApprovalCode'] ?? '',
-            $input['XID'] ?? '',
+            $input['Rrn'] ?? '',
         ];
 
         return implode(';', $fields) . ';';
