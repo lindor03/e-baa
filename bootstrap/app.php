@@ -25,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
          *
          * As of now, this has been added in the Admin and Shop providers. I will look for a better approach in Laravel 11 for this.
          */
+
+        $middleware->validateCsrfTokens(except: [
+            'raiaccept/return',
+            'raiaccept/notify',
+        ]);
+
         $middleware->remove(PreventRequestsDuringMaintenance::class);
 
         /**
