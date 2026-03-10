@@ -125,7 +125,7 @@ class PaymentController extends Controller
         /**
          * Verify bank signature
          */
-        $isVerified = RaiAcceptSignature::verifyAuto($input, $signature, $bankKey);
+        $isVerified = RaiAcceptSignature::verifyFlexible($input, $signature, $bankKey);
 
         Log::info('RaiAccept return verification', [
             'verified' => $isVerified
