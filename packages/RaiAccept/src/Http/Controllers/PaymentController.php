@@ -14,13 +14,34 @@ use Webkul\Sales\Repositories\OrderRepository;
 
 class PaymentController extends Controller
 {
+    protected array $errorCodes = [
+
+        '000' => 'Authorized transaction',
+        '105' => 'Transaction not allowed by issuing bank',
+        '116' => 'Shortage of funds',
+        '111' => 'Non-existent card',
+        '108' => 'Lost or stolen card',
+        '101' => 'Wrong expiration date',
+        '130' => 'Allowed overexpenditure limit exceeded',
+        '290' => 'Issuing bank unavailable',
+        '291' => 'Technical or communication problem',
+        '401' => 'Format error',
+        '402' => 'Acquirer/Merchant parameters error',
+        '403' => 'Connection with payment system error',
+        '404' => 'Purchaser authentication error',
+        '405' => 'Signature error',
+        '501' => 'Transaction cancelled by user',
+        '502' => 'Browser session expired',
+
+    ];
+
     public function __construct(
         protected OrderRepository $orderRepository,
         protected CartRepository $cartRepository
     ) {}
 
     /**
-     * Redirect customer to RaiAccept
+     * Redirect to bank
      */
     public function redirect()
     {
@@ -100,26 +121,44 @@ class PaymentController extends Controller
         $bankKey   = core()->getConfigData('sales.payment_methods.raiaccept.bank_public_key_pem');
         $debug     = core()->getConfigData('sales.payment_methods.raiaccept.debug');
 
+        $errorDescription = $this->errorCodes[$tranCode] ?? 'Unknown error';
+
         if ($debug) {
+
             Log::info('RaiAccept return callback', $input);
         }
 
-        $isVerified = RaiAcceptSignature::verifyFlexible(
+        $verified = RaiAcceptSignature::verifyFlexible(
             $input,
             $signature,
             $bankKey
         );
 
         if ($debug) {
+
             Log::info('RaiAccept return verification', [
-                'verified' => $isVerified
+                'verified' => $verified
             ]);
         }
 
-        if (! $isVerified || $tranCode !== '000') {
+        /**
+         * If payment failed
+         */
+        if ($tranCode !== '000') {
+
+            Log::warning('RaiAccept payment failed', [
+                'code' => $tranCode,
+                'description' => $errorDescription
+            ]);
+
+            session()->flash('error', 'Payment failed: '.$errorDescription);
+
             return redirect()->route('shop.checkout.cart.index');
         }
 
+        /**
+         * Recover cart
+         */
         $cart = Cart::getCart();
 
         if (! $cart) {
@@ -135,6 +174,9 @@ class PaymentController extends Controller
             }
         }
 
+        /**
+         * Prevent duplicate orders
+         */
         $existingOrder = $this->orderRepository->findOneByField('cart_id', $cart->id);
 
         if ($existingOrder) {
@@ -146,7 +188,32 @@ class PaymentController extends Controller
             return redirect()->route('shop.checkout.onepage.success');
         }
 
+        /**
+         * Create order
+         */
         $order = $this->orderRepository->create(Cart::prepareDataForOrder());
+
+        /**
+         * Save metadata
+         */
+        $order->payment->additional = [
+
+            'raiaccept' => [
+
+                'tran_code' => $tranCode,
+                'description' => $errorDescription,
+                'gateway_order' => $input['OrderID'] ?? null,
+                'amount' => $input['TotalAmount'] ?? null,
+                'currency' => $input['Currency'] ?? null,
+                'rrn' => $input['Rrn'] ?? null,
+                'approval_code' => $input['ApprovalCode'] ?? null,
+                'raw' => $input
+
+            ]
+
+        ];
+
+        $order->payment->save();
 
         session()->flash('order_id', $order->id);
 
@@ -156,7 +223,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Server notification
+     * Bank server notification
      */
     public function notify(Request $request)
     {

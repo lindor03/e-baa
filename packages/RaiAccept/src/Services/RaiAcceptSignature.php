@@ -6,9 +6,6 @@ use RuntimeException;
 
 class RaiAcceptSignature
 {
-    /**
-     * Build request signature string
-     */
     public static function buildRequestString(
         string $merchantId,
         string $terminalId,
@@ -28,9 +25,6 @@ class RaiAcceptSignature
         ]) . ';';
     }
 
-    /**
-     * Sign request with merchant private key
-     */
     public static function sign(string $data, string $privateKeyPem): string
     {
         $privateKey = openssl_pkey_get_private($privateKeyPem);
@@ -58,23 +52,12 @@ class RaiAcceptSignature
     }
 
     /**
-     * Flexible response verification
-     * Supports different UPC/Raiffeisen signature formats
+     * Flexible verification for UPC variants
      */
     public static function verifyFlexible(array $input, string $signatureBase64, string $publicKeyPem): bool
     {
-        if (empty($signatureBase64) || empty($publicKeyPem)) {
+        if (! $signatureBase64 || ! $publicKeyPem) {
             return false;
-        }
-
-        $publicKeyPem = trim($publicKeyPem);
-
-        // normalize key
-        if (! str_contains($publicKeyPem, 'BEGIN')) {
-            $publicKeyPem =
-                "-----BEGIN PUBLIC KEY-----\n" .
-                chunk_split($publicKeyPem, 64, "\n") .
-                "-----END PUBLIC KEY-----";
         }
 
         $publicKey = openssl_pkey_get_public($publicKeyPem);
@@ -85,7 +68,6 @@ class RaiAcceptSignature
 
         $variants = [
 
-            // Variant 1 (most common UPC)
             implode(';', [
                 $input['MerchantID'] ?? '',
                 $input['TerminalID'] ?? '',
@@ -98,19 +80,6 @@ class RaiAcceptSignature
                 $input['Rrn'] ?? '',
             ]) . ';',
 
-            // Variant 2 (some banks omit PurchaseTime)
-            implode(';', [
-                $input['MerchantID'] ?? '',
-                $input['TerminalID'] ?? '',
-                $input['OrderID'] ?? '',
-                $input['Currency'] ?? '',
-                $input['TotalAmount'] ?? '',
-                $input['TranCode'] ?? '',
-                $input['ApprovalCode'] ?? '',
-                $input['Rrn'] ?? '',
-            ]) . ';',
-
-            // Variant 3 (legacy UPC)
             implode(';', [
                 $input['MerchantID'] ?? '',
                 $input['TerminalID'] ?? '',
@@ -122,6 +91,7 @@ class RaiAcceptSignature
                 $input['ApprovalCode'] ?? '',
                 $input['XID'] ?? '',
             ]) . ';',
+
         ];
 
         foreach ($variants as $string) {
