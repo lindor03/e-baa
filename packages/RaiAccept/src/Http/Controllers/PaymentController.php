@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
-use RaiAccept\Services\RaiAcceptResponse;
 use RaiAccept\Services\RaiAcceptSignature;
 use Webkul\Checkout\Facades\Cart;
 use Webkul\Checkout\Repositories\CartRepository;
@@ -77,9 +76,9 @@ class PaymentController extends Controller
             $safe['Signature'] = '[hidden]';
 
             Log::info('RaiAccept redirect request', [
-                'payload'          => $safe,
+                'payload' => $safe,
                 'signature_string' => $signString,
-                'gateway'          => $gatewayUrl,
+                'gateway' => $gatewayUrl,
             ]);
         }
 
@@ -90,7 +89,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Bank return URL
+     * Return from bank
      */
     public function return(Request $request)
     {
@@ -105,40 +104,22 @@ class PaymentController extends Controller
             Log::info('RaiAccept return callback', $input);
         }
 
-        /**
-         * Verify bank signature
-         */
-        $isVerified = true;
+        $isVerified = RaiAcceptSignature::verifyFlexible(
+            $input,
+            $signature,
+            $bankKey
+        );
 
-        if ($bankKey && $signature) {
-
-            $responseString = RaiAcceptResponse::buildResponseString($input);
-
-            $isVerified = RaiAcceptSignature::verify(
-                $responseString,
-                $signature,
-                $bankKey
-            );
-
-            if ($debug) {
-                Log::info('RaiAccept return verification', [
-                    'verified' => $isVerified,
-                    'string'   => $responseString,
-                ]);
-            }
+        if ($debug) {
+            Log::info('RaiAccept return verification', [
+                'verified' => $isVerified
+            ]);
         }
 
-        if (! $isVerified) {
+        if (! $isVerified || $tranCode !== '000') {
             return redirect()->route('shop.checkout.cart.index');
         }
 
-        if ($tranCode !== '000') {
-            return redirect()->route('shop.checkout.cart.index');
-        }
-
-        /**
-         * Restore cart if session expired
-         */
         $cart = Cart::getCart();
 
         if (! $cart) {
@@ -154,22 +135,6 @@ class PaymentController extends Controller
             }
         }
 
-        /**
-         * Security check (bank certification requirement)
-         */
-        if ((int)$input['TotalAmount'] !== (int) round($cart->grand_total * 100)) {
-
-            Log::warning('RaiAccept amount mismatch', [
-                'bank' => $input['TotalAmount'],
-                'cart' => round($cart->grand_total * 100),
-            ]);
-
-            return redirect()->route('shop.checkout.cart.index');
-        }
-
-        /**
-         * Prevent duplicate orders
-         */
         $existingOrder = $this->orderRepository->findOneByField('cart_id', $cart->id);
 
         if ($existingOrder) {
@@ -181,38 +146,7 @@ class PaymentController extends Controller
             return redirect()->route('shop.checkout.onepage.success');
         }
 
-        /**
-         * Create order
-         */
         $order = $this->orderRepository->create(Cart::prepareDataForOrder());
-
-        /**
-         * Store payment metadata
-         */
-        try {
-
-            $additional = $order->payment->additional ?? [];
-
-            $additional['raiaccept'] = [
-                'tran_code' => $tranCode,
-                'rrn'       => $input['Rrn'] ?? null,
-                'approval'  => $input['ApprovalCode'] ?? null,
-                'amount'    => $input['TotalAmount'] ?? null,
-                'currency'  => $input['Currency'] ?? null,
-                'raw'       => $input,
-            ];
-
-            $order->payment->additional = $additional;
-            $order->payment->save();
-
-        } catch (Exception $e) {
-
-            if ($debug) {
-                Log::warning('Metadata save failed', [
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
 
         session()->flash('order_id', $order->id);
 
@@ -222,7 +156,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Bank server notification
+     * Server notification
      */
     public function notify(Request $request)
     {
@@ -231,9 +165,13 @@ class PaymentController extends Controller
         $signature = $input['Signature'] ?? '';
         $bankKey   = core()->getConfigData('sales.payment_methods.raiaccept.bank_public_key_pem');
 
-        $responseString = RaiAcceptResponse::buildResponseString($input);
+        $verified = RaiAcceptSignature::verifyFlexible(
+            $input,
+            $signature,
+            $bankKey
+        );
 
-        if (! RaiAcceptSignature::verify($responseString, $signature, $bankKey)) {
+        if (! $verified) {
 
             return response(
                 "Response.action=reverse\nResponse.reason=invalid_signature",
