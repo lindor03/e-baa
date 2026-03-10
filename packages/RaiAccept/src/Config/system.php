@@ -85,7 +85,7 @@ return [
                 'type'          => 'text',
                 'channel_based' => true,
                 'locale_based'  => false,
-                'default'       => 'en',
+                'default'       => 'sq',
             ],
             [
                 'name'          => 'private_key_pem',
